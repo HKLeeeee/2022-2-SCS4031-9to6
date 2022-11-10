@@ -3,7 +3,8 @@ from flask_restful import reqparse, abort, Api, Resource
 from flask_migrate import Migrate
 from flask_marshmallow import Marshmallow
 from datetime import timedelta
-
+import sys
+from pathlib import Path
 from models import db
 from views import s3
 
@@ -24,6 +25,12 @@ app.secret_key = '#$DSF51wfdFF2WE^4&@#$' # 세션 시크릿키
 migrate = Migrate(app, db)
 db.init_app(app)
 api = Api(app)
+
+# add ROOT to PATH
+FILE = Path(__file__).resolve()
+ROOT = FILE.parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.append(str(ROOT))
 
 
 @app.route('/', methods=['GET'])
