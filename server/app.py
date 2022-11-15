@@ -14,7 +14,7 @@ from views.memberAPI import Members, MemberList, MemberCheck, Login, Logout
 from views.historyAPI import FloodHistoryList
 from views.shelterAPI import Shelters, ShelterList
 from views.postingAPI import Postings, PostingList
-
+from views.modelAPI import AIModel
 import config
 
 app = Flask(__name__)
@@ -30,6 +30,9 @@ api = Api(app)
 
 # add ROOT to PATH
 FILE = Path(__file__).resolve()
+YOLO_ROOT = '/2022-2-SCS4031-9to6/Model/object_detection'
+if YOLO_ROOT not in sys.path:
+    sys.path.append(YOLO_ROOT)
 ROOT = FILE.parents[1]
 if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))
@@ -57,6 +60,7 @@ api.add_resource(Postings, '/Postings/<posting_index>')
 api.add_resource(PostingList, '/Postings')
 api.add_resource(Login, '/Login')
 api.add_resource(Logout, '/Logout')
+api.add_resource(AIModel, '/inference/<cctv_id>')
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", debug=True, port=5000)
