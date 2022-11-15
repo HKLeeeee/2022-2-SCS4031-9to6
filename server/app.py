@@ -6,7 +6,7 @@ from flask_cors import CORS, cross_origin
 from datetime import timedelta
 import sys
 from pathlib import Path
-from models import db
+from model import db
 from views import s3
 
 from views.cctvAPI import CCTVS, CCTVList
