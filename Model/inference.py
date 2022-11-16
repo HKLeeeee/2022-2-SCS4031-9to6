@@ -1,4 +1,4 @@
-#import tensorflow as tf
+import tensorflow as tf
 import glob
 
 import torch
@@ -14,15 +14,15 @@ import sys
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[1]
-print(ROOT)
 if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))
+
 from Model.object_detection.detect import detection_run
 from Model.data_loader.frame_extraction import get_one_frame
 from Model.object_detection.models.common import DetectMultiBackend
 from Model.object_detection.utils.torch_utils import select_device
-#from server.views import s3
-#from server.views.utils import s3_upload_file, s3_delete_image
+from server.views import s3
+from server.views.utils import s3_upload_file, s3_delete_image
 
 # delete url
 dummy_url = 'http://210.179.218.52:1935/live/157.stream/playlist.m3u8'
@@ -82,9 +82,8 @@ def read_image_from_dir(img_dir, input_size=299):
 
 class Inference:
     def __init__(self, base_dir='.'):
-        print(base_dir)
         # load model
-        # self.binary_model = tf.keras.models.load_model('./image_classification/best.h5')
+        self.binary_model = tf.keras.models.load_model('./image_classification/best.h5')
         print("TF Model Loaded!")
 
         device = select_device()
@@ -95,7 +94,7 @@ class Inference:
         self.detection_model.names[3] = '3단계'
         print("Torch Model Loaded!")
 
-        self.base_dir = base_dir
+        self.base_dir = str(base_dir)
         if not os.path.isdir(self.base_dir):
             os.mkdir(self.base_dir)
 
@@ -112,7 +111,7 @@ class Inference:
                                 view_img=False,  # show results
                                 save_txt=False,  # save results to *.txt
                                 save_conf=False,  # save confidences in --save-txt labels
-                                nosave=False,  # do not save images/videos
+                                nosave=True,  # do not save images/videos
                                 classes=None,  # filter by class: --class 0, or --class 0 2 3
                                 agnostic_nms=False,  # class-agnostic NMS
                                 augment=False,  # augmented inference
@@ -145,7 +144,7 @@ class Inference:
             return 0
 
     def get_recent_mp4(self):
-        mp4_list = glob.glob(self.base_dir+'/*.mp4')
+        mp4_list = glob.glob(self.base_dir +'/*.mp4')
         mp4_list = list(map(lambda x: x.split('/')[-1].split('.')[0], mp4_list))
         return max(mp4_list)
 
@@ -168,6 +167,7 @@ class Inference:
             result = 9
 
         # image S3 저장
+        image_url = ''
         if result != 0:
             # 판단결과 침수일때, 이미지 저장
             i = 0
@@ -183,19 +183,14 @@ class Inference:
                     i += 1
                     print('image upload failed, Retry upload image {} times'.format(i))
                     if i >=3 :
-                        print('image upload failed...T,T')
-                        image_url = ''
+                        print('image upload failed...T,T')             
                         break  
         else:
             os.remove(mp4_src)
             os.remove(img_src)
-            image_url = ''
 
         # 0 : 정상
         # 1,2,3(object detection) : n단계
         # 9 (binary classification) : 침수
         return result, image_url
 
-
-
-inf = Inference()
