@@ -1,4 +1,4 @@
-import tensorflow as tf
+#import tensorflow as tf
 import glob
 
 import torch
@@ -8,6 +8,7 @@ import numpy as np
 import time
 import signal
 import os
+import threading
 from multiprocessing import Process
 from pathlib import Path
 import sys
@@ -21,30 +22,12 @@ from Model.object_detection.detect import detection_run
 from Model.data_loader.frame_extraction import get_one_frame
 from Model.object_detection.models.common import DetectMultiBackend
 from Model.object_detection.utils.torch_utils import select_device
-from server.views import s3
-from server.views.utils import s3_upload_file, s3_delete_image
+#from server.views import s3
+#from server.views.utils import s3_upload_file, s3_delete_image
 
+# TODO
 # delete url
 dummy_url = 'http://210.179.218.52:1935/live/157.stream/playlist.m3u8'
-
-
-def raise_sigint():
-    """
-    Raising the SIGINT signal in the current process and all sub-processes.
-
-    os.kill() only issues a signal in the current process (without subprocesses).
-    CTRL+C on the console sends the signal to the process group (which we need).
-    """
-    if hasattr(signal, 'CTRL_C_EVENT'):
-        # windows. Need CTRL_C_EVENT to raise the signal in the whole process group
-        os.kill(os.getpid(), signal.CTRL_C_EVENT)
-    else:
-        # unix.
-        pgid = os.getpgid(os.getpid())
-        if pgid == 1:
-            os.kill(os.getpid(), signal.SIGINT)
-        else:
-            os.killpg(os.getpgid(os.getpid()), signal.SIGINT)
 
 
 def ffmpeg(m3u8_url, save_dir):
@@ -52,7 +35,7 @@ def ffmpeg(m3u8_url, save_dir):
 
     f"#######save to {save_dir}/{file_name}.mp4###########\n"
     try:
-        subprocess.run(['ffmpeg', '-i', m3u8_url, '-bsf:a', 'aac_adtstoasc', '-vcodec', 'copy',
+        subprocess.run(['ffmpeg', '-t', '5', '-i', m3u8_url, '-bsf:a', 'aac_adtstoasc', '-vcodec', 'copy',
                         '-c', 'copy', '-crf', '50', save_dir + '/' + file_name+'.mp4'])
 
     except KeyboardInterrupt as e:
@@ -61,17 +44,9 @@ def ffmpeg(m3u8_url, save_dir):
 
 
 def download_mp4(m3u8_url, save_dir='.'):
-    if __name__ == '__main__':
-        process = Process(target=ffmpeg, args=(m3u8_url, save_dir))
-        process.start()
-        time.sleep(2)
-
-        try:
-            raise_sigint()
-        except:
-            print('process done')
-    return True
-
+    process = threading.Thread(target=ffmpeg, args=(m3u8_url, save_dir))
+    process.start()
+ 
 
 def read_image_from_dir(img_dir, input_size=299):
     image = cv2.imread(img_dir)
@@ -83,7 +58,7 @@ def read_image_from_dir(img_dir, input_size=299):
 class Inference:
     def __init__(self, base_dir='.'):
         # load model
-        self.binary_model = tf.keras.models.load_model('./image_classification/best.h5')
+        #self.binary_model = tf.keras.models.load_model('./image_classification/best.h5')
         print("TF Model Loaded!")
 
         device = select_device()
@@ -137,6 +112,7 @@ class Inference:
 
     def classification_inference(self, src):
         img = read_image_from_dir(src)
+        img = np.array([img])
         result = self.binary_model(img)
         if result[0][0] >= 0.5:  # flood
             return 9
@@ -149,21 +125,27 @@ class Inference:
         return max(mp4_list)
 
     def run(self, url):
+        result = -1
         download_mp4(url, self.base_dir)
-
         file_name = self.get_recent_mp4()
-        mp4_src = os.path.join(self.base_dir, file_name+'.mp4')
-        print('##### path:', mp4_src)
-        get_one_frame(mp4_src, self.base_dir)
+        try:
+            file_name = self.get_recent_mp4()
+            mp4_src = os.path.join(self.base_dir, file_name + '.mp4')
+            print('##### path:', mp4_src)
+            get_one_frame(mp4_src, self.base_dir)
+        except Exception as e:
+            print(e)
+            print('fail to download video')
 
         img_name = file_name+'.jpg'
         img_src = self.base_dir+'/'+img_name
+
+        # execute inference
         result = self.detection_inference(img_src)
         if result is False:
             # no detection 일때 binary detection
-            src = read_image_from_dir(img_src)
-            src = np.array(src)
-            result = self.classification_inference(src)
+            # TODO
+            # result = self.classification_inference(src)
             result = 9
 
         # image S3 저장
@@ -185,12 +167,13 @@ class Inference:
                     if i >=3 :
                         print('image upload failed...T,T')             
                         break  
-        else:
-            os.remove(mp4_src)
-            os.remove(img_src)
+        
+        os.remove(mp4_src)
+        os.remove(img_src)
 
         # 0 : 정상
         # 1,2,3(object detection) : n단계
         # 9 (binary classification) : 침수
         return result, image_url
 
+download_mp4(dummy_url)
